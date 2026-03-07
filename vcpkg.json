@@ -3,9 +3,7 @@
   "version": "1.0.0",
   "description": "OpenAL Soft 3D audio spatializer proxy for UE4/5",
   "dependencies": [
-    {
-      "name": "openal-soft"
-    },
+    "openal-soft",
     "minhook"
   ]
 }
