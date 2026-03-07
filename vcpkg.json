@@ -9,10 +9,4 @@
     },
     "minhook"
   ],
-  "overrides": [
-    {
-      "name": "openal-soft",
-      "version": "1.23.0"
-    }
-  ]
 }
