@@ -1,0 +1,8 @@
+; UEOAL – module definition file
+; Ensures exported symbols use their plain C names (no C++ mangling)
+LIBRARY "XAudio2_9"
+EXPORTS
+    XAudio2Create               @1
+    XAudio2CreateWithVersionInfo @2
+    CreateAudioVolumeMeter       @3
+    CreateAudioReverb            @4

@@ -1,0 +1,20 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// UEOAL – auto-generated version header (do not edit manually)
+#pragma once
+
+#define UEOAL_VERSION_MAJOR @PROJECT_VERSION_MAJOR@
+#define UEOAL_VERSION_MINOR @PROJECT_VERSION_MINOR@
+#define UEOAL_VERSION_PATCH @PROJECT_VERSION_PATCH@
+
+#define UEOAL_STRINGIFY_INNER(x) #x
+#define UEOAL_STRINGIFY(x)       UEOAL_STRINGIFY_INNER(x)
+
+#define UEOAL_VERSION_STRING \
+    UEOAL_STRINGIFY(UEOAL_VERSION_MAJOR) "." \
+    UEOAL_STRINGIFY(UEOAL_VERSION_MINOR) "." \
+    UEOAL_STRINGIFY(UEOAL_VERSION_PATCH)
+
+#define UEOAL_PROJECT_NAME    "UEOAL"
+#define UEOAL_PROJECT_URL     "https://github.com/yourusername/UEOAL"
+#define UEOAL_BUILD_DATE      __DATE__
+#define UEOAL_BUILD_TIME      __TIME__

@@ -1,0 +1,47 @@
+# Build directories
+build/
+build-x64/
+build-x86/
+out/
+
+# Release output (intentionally excluded)
+Release/
+
+# CMake generated
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+CPackConfig.cmake
+CPackSourceConfig.cmake
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.sln
+
+# Compiled output
+*.dll
+*.lib
+*.exp
+*.pdb
+*.ilk
+*.obj
+
+# VS / Rider / CLion
+.vs/
+.idea/
+.vscode/
+*.user
+*.suo
+
+# vcpkg installed tree
+vcpkg_installed/
+
+# OS
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Logs & packaging
+*.log
+*.zip
+_CPack_Packages/
