@@ -38,7 +38,7 @@ jobs:
         shell: bash
         run: |
           # Try tag first, fall back to parsing CMakeLists.txt.
-          # grep -P is not used: it fails on Windows runners with
+          # grep -P is avoided: it fails on Windows runners with
           # "supports only unibyte and UTF-8 locales". Use sed with BRE instead.
           TAG=$(git describe --tags --match "v*" --abbrev=0 2>/dev/null || echo "")
           if [[ "$TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+) ]]; then
@@ -87,12 +87,11 @@ jobs:
         shell: pwsh
         run: |
           $triplet = if ("${{ matrix.arch }}" -eq "x86") { "x86-windows" } else { "x64-windows" }
+          # In manifest mode vcpkg reads vcpkg.json automatically.
+          # Do NOT pass individual package names - that is only valid in classic mode.
           & "$env:VCPKG_ROOT\vcpkg.exe" install `
-            openal-soft `
-            minhook `
             --triplet $triplet `
             --x-manifest-root "${{ github.workspace }}" `
-            --feature-flags=manifests `
             --clean-after-build
 
       - name: Configure CMake (${{ matrix.arch }})
@@ -170,7 +169,7 @@ jobs:
           path: ${{ github.workspace }}/${{ steps.ver.outputs.zip_name }}.zip
           retention-days: 30
 
-  # Only runs when a version tag is pushed (e.g. v1.0.0)
+  # Only runs when a version tag is pushed (e.g. v1.0.1)
   release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
