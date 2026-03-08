@@ -1,18 +1,17 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# UEOAL – GitHub Actions CI/CD
+# UEOAL - GitHub Actions CI/CD
 # Builds XAudio2_9.dll for Win32 and x64, packages each into a versioned ZIP.
 
 name: Build UEOAL
 
 on:
   push:
-    branches: [ "main", "dev" ]
-    tags:     [ "v*.*.*" ]
+    branches: ["main", "dev"]
+    tags: ["v*.*.*"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
   workflow_dispatch:
 
-# ── Shared env ──────────────────────────────────────────────────────────────
 env:
   VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
 
@@ -24,38 +23,37 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch:   [ x64, x86 ]
-        config: [ Release ]
+        arch: [x64, x86]
+        config: [Release]
 
     steps:
-      # ── Checkout ────────────────────────────────────────────────────────────
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           submodules: recursive
-          fetch-depth: 0            # needed for git describe / version tags
+          fetch-depth: 0
 
-      # ── Extract version ─────────────────────────────────────────────────────
       - name: Extract version
         id: ver
         shell: bash
         run: |
-          # Try tag first, fall back to CMakeLists version
+          # Try tag first, fall back to parsing CMakeLists.txt.
+          # grep -P is not used: it fails on Windows runners with
+          # "supports only unibyte and UTF-8 locales". Use sed with BRE instead.
           TAG=$(git describe --tags --match "v*" --abbrev=0 2>/dev/null || echo "")
           if [[ "$TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+) ]]; then
             VERSION="${BASH_REMATCH[1]}"
           else
-            VERSION=$(grep -oP 'project\(UEOAL\s+VERSION\s+\K[0-9]+\.[0-9]+\.[0-9]+' CMakeLists.txt)
+            VERSION=$(sed -n 's/.*project(UEOAL[[:space:]]*VERSION[[:space:]]*\([0-9]*\.[0-9]*\.[0-9]*\).*/\1/p' CMakeLists.txt | head -1)
           fi
           COMMIT_SHORT=$(git rev-parse --short HEAD)
-          echo "version=$VERSION"         >> "$GITHUB_OUTPUT"
-          echo "commit=$COMMIT_SHORT"     >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "commit=$COMMIT_SHORT" >> "$GITHUB_OUTPUT"
           echo "zip_name=UEOAL-${VERSION}-${{ matrix.arch }}" >> "$GITHUB_OUTPUT"
           echo "Resolved version: $VERSION  commit: $COMMIT_SHORT"
 
-      # ── MSVC dev environment ────────────────────────────────────────────────
-      # Split into two steps because GitHub Actions expressions don't support
-      # ternary syntax inside action input values.
+      # Split into two steps: GitHub Actions expression syntax does not support
+      # ternary operators inside action input values.
       - name: Set up MSVC (x64)
         if: matrix.arch == 'x64'
         uses: ilammy/msvc-dev-cmd@v1
@@ -68,15 +66,13 @@ jobs:
         with:
           arch: x86
 
-      # ── vcpkg cache ─────────────────────────────────────────────────────────
       - name: Export GitHub Actions cache environment variables
         uses: actions/github-script@v7
         with:
           script: |
-            core.exportVariable('ACTIONS_CACHE_URL',    process.env.ACTIONS_CACHE_URL    || '');
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
             core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
 
-      # ── Bootstrap vcpkg ─────────────────────────────────────────────────────
       - name: Bootstrap vcpkg
         shell: pwsh
         run: |
@@ -87,35 +83,31 @@ jobs:
           & "$vcpkgRoot\bootstrap-vcpkg.bat" -disableMetrics
           "VCPKG_ROOT=$vcpkgRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      # ── Install vcpkg packages ───────────────────────────────────────────────
       - name: Install dependencies via vcpkg (${{ matrix.arch }})
         shell: pwsh
         run: |
           $triplet = if ("${{ matrix.arch }}" -eq "x86") { "x86-windows" } else { "x64-windows" }
           & "$env:VCPKG_ROOT\vcpkg.exe" install `
-              openal-soft `
-              minhook `
-              --triplet $triplet `
-              --x-manifest-root "${{ github.workspace }}" `
-              --feature-flags=manifests `
-              --clean-after-build
+            openal-soft `
+            minhook `
+            --triplet $triplet `
+            --x-manifest-root "${{ github.workspace }}" `
+            --feature-flags=manifests `
+            --clean-after-build
 
-      # ── Configure CMake ─────────────────────────────────────────────────────
       - name: Configure CMake (${{ matrix.arch }})
         shell: pwsh
         run: |
-          $triplet   = if ("${{ matrix.arch }}" -eq "x86") { "x86-windows" } else { "x64-windows" }
-          $platform  = if ("${{ matrix.arch }}" -eq "x86") { "Win32"       } else { "x64"         }
-          $buildDir  = "build-${{ matrix.arch }}"
-
+          $triplet  = if ("${{ matrix.arch }}" -eq "x86") { "x86-windows" } else { "x64-windows" }
+          $platform = if ("${{ matrix.arch }}" -eq "x86") { "Win32" } else { "x64" }
+          $buildDir = "build-${{ matrix.arch }}"
           cmake -B $buildDir `
             -A $platform `
             -DCMAKE_BUILD_TYPE=${{ matrix.config }} `
             "-DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" `
             "-DVCPKG_TARGET_TRIPLET=$triplet" `
-            -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/install-${{ matrix.arch }}"
+            "-DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/install-${{ matrix.arch }}"
 
-      # ── Build ────────────────────────────────────────────────────────────────
       - name: Build (${{ matrix.arch }})
         shell: pwsh
         run: |
@@ -123,25 +115,23 @@ jobs:
             --config ${{ matrix.config }} `
             --parallel
 
-      # ── Install ─────────────────────────────────────────────────────────────
       - name: Install (${{ matrix.arch }})
         shell: pwsh
         run: |
           cmake --install "build-${{ matrix.arch }}" --config ${{ matrix.config }}
 
-      # ── Package ZIP ─────────────────────────────────────────────────────────
       - name: Package ZIP (${{ matrix.arch }})
         shell: pwsh
         run: |
-          $version  = "${{ steps.ver.outputs.version }}"
-          $commit   = "${{ steps.ver.outputs.commit }}"
-          $arch     = "${{ matrix.arch }}"
-          $zipName  = "${{ steps.ver.outputs.zip_name }}"
-          $stagDir  = "${{ github.workspace }}\staging\$zipName"
+          $version = "${{ steps.ver.outputs.version }}"
+          $commit  = "${{ steps.ver.outputs.commit }}"
+          $arch    = "${{ matrix.arch }}"
+          $zipName = "${{ steps.ver.outputs.zip_name }}"
+          $stagDir = "${{ github.workspace }}\staging\$zipName"
 
           New-Item -ItemType Directory -Force -Path $stagDir | Out-Null
 
-          # Copy DLL
+          # Copy DLL (prefer install tree, fall back to build tree)
           $dllPath = Get-ChildItem "install-$arch\bin\XAudio2_9.dll" -ErrorAction SilentlyContinue
           if (-not $dllPath) {
             $dllPath = Get-ChildItem "build-$arch\${{ matrix.config }}\XAudio2_9.dll" -ErrorAction SilentlyContinue
@@ -152,7 +142,7 @@ jobs:
           $pdbPath = Get-ChildItem "build-$arch\${{ matrix.config }}\*.pdb" -ErrorAction SilentlyContinue
           if ($pdbPath) { Copy-Item $pdbPath.FullName $stagDir }
 
-          # Copy OpenAL Soft runtime DLL (dynamic-linked build)
+          # Copy OpenAL Soft runtime DLL
           $oalDll = Get-ChildItem "$env:VCPKG_ROOT\installed\$arch-windows\bin\OpenAL32.dll" -ErrorAction SilentlyContinue
           if ($oalDll) { Copy-Item $oalDll.FullName $stagDir }
 
@@ -160,21 +150,19 @@ jobs:
           Copy-Item "README.md" $stagDir -ErrorAction SilentlyContinue
           Copy-Item "LICENSE"   $stagDir -ErrorAction SilentlyContinue
 
-          # Write version manifest
-          # Note: PowerShell here-strings (@" "@) require the closing "@ at column 0,
-          # which conflicts with YAML block indentation - use Out-File with a plain string.
+          # Write version manifest.
+          # PowerShell here-strings (@" "@) require the closing "@ at column 0,
+          # which conflicts with YAML block indentation - use Out-File instead.
           $builtAt = (Get-Date -Format 'yyyy-MM-dd HH:mm:ss') + ' UTC'
           "UEOAL $version ($arch)`nCommit : $commit`nBuilt  : $builtAt" |
             Out-File -FilePath "$stagDir\VERSION.txt" -Encoding utf8
 
-          # Zip
           Compress-Archive -Path "$stagDir\*" `
             -DestinationPath "${{ github.workspace }}\${zipName}.zip" `
             -Force
 
           Write-Host "ZIP created: ${zipName}.zip"
 
-      # ── Upload artifact ──────────────────────────────────────────────────────
       - name: Upload artifact (${{ matrix.arch }})
         uses: actions/upload-artifact@v4
         with:
@@ -182,7 +170,7 @@ jobs:
           path: ${{ github.workspace }}/${{ steps.ver.outputs.zip_name }}.zip
           retention-days: 30
 
-  # ── GitHub Release (only on version tags) ─────────────────────────────────
+  # Only runs when a version tag is pushed (e.g. v1.0.0)
   release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
@@ -207,16 +195,16 @@ jobs:
           body: |
             ## UEOAL ${{ github.ref_name }}
 
-            OpenAL Soft–based 3D audio spatializer / XAudio2 proxy for Unreal Engine 4/5 games.
+            OpenAL Soft-based 3D audio spatializer / XAudio2 proxy for Unreal Engine 4/5 games.
 
             ### Installation
             1. Download the ZIP matching your game's architecture (most UE games are **x64**).
-            2. Extract `XAudio2_9.dll` (and `OpenAL32.dll` if present) into the game's
-               root directory (same folder as the game `.exe`).
-            3. Launch the game — HRTF binaural audio is now active.
+            2. Extract `XAudio2_9.dll` (and `OpenAL32.dll`) into the game root directory
+               (same folder as the game `.exe`).
+            3. Launch the game - HRTF binaural audio is now active.
 
             ### Logging
-            Set environment variable `UEOAL_LOG_PATH` to a file path to enable verbose logs:
+            Set the environment variable `UEOAL_LOG_PATH` to enable verbose logging:
             ```
             set UEOAL_LOG_PATH=C:\ueoal.log
             ```
