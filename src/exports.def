@@ -1,8 +1,10 @@
-; UEOAL – module definition file
-; Ensures exported symbols use their plain C names (no C++ mangling)
+; UEOAL - module definition file
+; ExportedName = InternalName lets us use UEOAL_* internally so we never
+; define a symbol called XAudio2Create (which xaudio2.h already defines
+; inline), avoiding C2084 entirely.
 LIBRARY "XAudio2_9"
 EXPORTS
-    XAudio2Create               @1
-    XAudio2CreateWithVersionInfo @2
-    CreateAudioVolumeMeter       @3
-    CreateAudioReverb            @4
+    XAudio2Create               = UEOAL_XAudio2Create               @1
+    XAudio2CreateWithVersionInfo = UEOAL_XAudio2CreateWithVersionInfo @2
+    CreateAudioVolumeMeter       = UEOAL_CreateAudioVolumeMeter      @3
+    CreateAudioReverb            = UEOAL_CreateAudioReverb           @4

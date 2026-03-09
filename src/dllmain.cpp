@@ -8,10 +8,6 @@
 //   UEOAL_LOG_PATH=C:\path\to\ueoal.log
 // to enable verbose logging.
 
-// XAUDIO2_HELPER_FUNCTIONS suppresses the inline XAudio2Create /
-// XAudio2CreateWithVersionInfo bodies in xaudio2.h so we can define
-// our own proxy implementations below.
-#define XAUDIO2_HELPER_FUNCTIONS
 #include <windows.h>
 #include <xaudio2.h>
 
@@ -92,7 +88,7 @@ BOOL APIENTRY DllMain(HMODULE /*hModule*/, DWORD reason, LPVOID /*reserved*/) {
 //  XAudio2_9.dll will transparently pick up our proxy.
 // ─────────────────────────────────────────────────────────────────────────────
 
-HRESULT WINAPI XAudio2Create(IXAudio2**           ppXAudio2,
+HRESULT WINAPI UEOAL_XAudio2Create(IXAudio2**           ppXAudio2,
                               UINT32               Flags,
                               XAUDIO2_PROCESSOR    XAudio2Processor)
 {
@@ -121,20 +117,17 @@ HRESULT WINAPI XAudio2Create(IXAudio2**           ppXAudio2,
 }
 
 // ── XAudio2CreateWithVersionInfo (UE 4.27+ / Win 10 SDK) ────────────────────
-// Re-declare without dllimport so our definition does not trigger C4273.
-extern "C" HRESULT WINAPI XAudio2CreateWithVersionInfo(IXAudio2**, UINT32,
-                                                        XAUDIO2_PROCESSOR, DWORD);
-HRESULT WINAPI XAudio2CreateWithVersionInfo(IXAudio2**        ppXAudio2,
+HRESULT WINAPI UEOAL_XAudio2CreateWithVersionInfo(IXAudio2**        ppXAudio2,
                                              UINT32            Flags,
                                              XAUDIO2_PROCESSOR XAudio2Processor,
                                              DWORD             /*ntddiVersion*/)
 {
     // Delegate to our XAudio2Create; version param only used for driver hints
-    return XAudio2Create(ppXAudio2, Flags, XAudio2Processor);
+    return UEOAL_XAudio2Create(ppXAudio2, Flags, XAudio2Processor);
 }
 
 // ── CreateAudioVolumeMeter / CreateAudioReverb – forward to real DLL ─────────
-HRESULT WINAPI CreateAudioVolumeMeter(IUnknown** ppApo) {
+HRESULT WINAPI UEOAL_CreateAudioVolumeMeter(IUnknown** ppApo) {
     HMODULE real = GetRealXAudio2();
     if (!real) return HRESULT_FROM_WIN32(ERROR_MOD_NOT_FOUND);
     using Fn = HRESULT(WINAPI*)(IUnknown**);
@@ -142,7 +135,7 @@ HRESULT WINAPI CreateAudioVolumeMeter(IUnknown** ppApo) {
     return fn ? fn(ppApo) : HRESULT_FROM_WIN32(ERROR_PROC_NOT_FOUND);
 }
 
-HRESULT WINAPI CreateAudioReverb(IUnknown** ppApo) {
+HRESULT WINAPI UEOAL_CreateAudioReverb(IUnknown** ppApo) {
     HMODULE real = GetRealXAudio2();
     if (!real) return HRESULT_FROM_WIN32(ERROR_MOD_NOT_FOUND);
     using Fn = HRESULT(WINAPI*)(IUnknown**);
