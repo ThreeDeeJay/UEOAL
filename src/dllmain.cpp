@@ -8,6 +8,10 @@
 //   UEOAL_LOG_PATH=C:\path\to\ueoal.log
 // to enable verbose logging.
 
+// XAUDIO2_HELPER_FUNCTIONS suppresses the inline XAudio2Create /
+// XAudio2CreateWithVersionInfo bodies in xaudio2.h so we can define
+// our own proxy implementations below.
+#define XAUDIO2_HELPER_FUNCTIONS
 #include <windows.h>
 #include <xaudio2.h>
 
@@ -117,6 +121,9 @@ HRESULT WINAPI XAudio2Create(IXAudio2**           ppXAudio2,
 }
 
 // ── XAudio2CreateWithVersionInfo (UE 4.27+ / Win 10 SDK) ────────────────────
+// Re-declare without dllimport so our definition does not trigger C4273.
+extern "C" HRESULT WINAPI XAudio2CreateWithVersionInfo(IXAudio2**, UINT32,
+                                                        XAUDIO2_PROCESSOR, DWORD);
 HRESULT WINAPI XAudio2CreateWithVersionInfo(IXAudio2**        ppXAudio2,
                                              UINT32            Flags,
                                              XAUDIO2_PROCESSOR XAudio2Processor,
