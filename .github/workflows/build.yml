@@ -1,213 +1,157 @@
-# SPDX-License-Identifier: GPL-3.0-or-later
-# UEOAL - GitHub Actions CI/CD
-# Builds XAudio2_9.dll for Win32 and x64, packages each into a versioned ZIP.
+#Based on template from: https://github.com/ThreeDeeJay/GitHub-Actions-build-templates/blob/main/Windows-CMake.yml
+name: Build
 
-name: Build UEOAL
+env:
+  GH_TOKEN: ${{github.token}}
+  Branch: ${{github.ref_name}}
+  Artifacts: build/Release
+  Title: ${{github.event.repository.name}}
+  Executable: ${{github.event.repository.name}}.exe # *
 
 on:
   push:
-    branches: ["main", "dev"]
-    tags: ["v*.*.*"]
+    Branches: $Branch
   pull_request:
-    branches: ["main"]
+    Branches: $Branch
   workflow_dispatch:
 
-env:
-  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
-
 jobs:
-  build:
-    name: ${{ matrix.arch }} / ${{ matrix.config }}
-    runs-on: windows-latest
-
+  Build:
+    name: ${{matrix.Settings.Name}}-${{matrix.Configuration}}
+    runs-on: windows-2022
     strategy:
-      fail-fast: false
       matrix:
-        arch: [x64, x86]
-        config: [Release]
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-          fetch-depth: 0
-
-      - name: Extract version
-        id: ver
-        shell: bash
-        run: |
-          # Try tag first, fall back to parsing CMakeLists.txt.
-          # grep -P is avoided: it fails on Windows runners with
-          # "supports only unibyte and UTF-8 locales". Use sed with BRE instead.
-          TAG=$(git describe --tags --match "v*" --abbrev=0 2>/dev/null || echo "")
-          if [[ "$TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+) ]]; then
-            VERSION="${BASH_REMATCH[1]}"
-          else
-            VERSION=$(sed -n 's/.*project(UEOAL[[:space:]]*VERSION[[:space:]]*\([0-9]*\.[0-9]*\.[0-9]*\).*/\1/p' CMakeLists.txt | head -1)
-          fi
-          COMMIT_SHORT=$(git rev-parse --short HEAD)
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "commit=$COMMIT_SHORT" >> "$GITHUB_OUTPUT"
-          echo "zip_name=UEOAL-${VERSION}-${{ matrix.arch }}" >> "$GITHUB_OUTPUT"
-          echo "Resolved version: $VERSION  commit: $COMMIT_SHORT"
-
-      # Split into two steps: GitHub Actions expression syntax does not support
-      # ternary operators inside action input values.
-      - name: Set up MSVC (x64)
-        if: matrix.arch == 'x64'
-        uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: x64
-
-      - name: Set up MSVC (x86)
-        if: matrix.arch == 'x86'
-        uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: x86
-
-      - name: Export GitHub Actions cache environment variables
-        uses: actions/github-script@v7
-        with:
-          script: |
-            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
-            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
-
-      - name: Bootstrap vcpkg
-        shell: pwsh
-        run: |
-          $vcpkgRoot = "${{ github.workspace }}\vcpkg"
-          if (-not (Test-Path $vcpkgRoot)) {
-            git clone https://github.com/microsoft/vcpkg.git $vcpkgRoot --depth 1
+        Configuration: [Release] #[Release, Debug]
+        Settings:
+#        - {
+#            Name: "Win32",
+#            Platform: "Win32",
+#            Architecture: "x86",
+#            Triplet: "x86-windows"
+#          }
+        - {
+            Name: "Win64",
+            Platform: "x64",
+            Architecture: "x64",
+            Triplet: "x64-windows"
           }
-          & "$vcpkgRoot\bootstrap-vcpkg.bat" -disableMetrics
-          "VCPKG_ROOT=$vcpkgRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
-      - name: Install dependencies via vcpkg (${{ matrix.arch }})
-        shell: pwsh
-        run: |
-          $triplet = if ("${{ matrix.arch }}" -eq "x86") { "x86-windows" } else { "x64-windows" }
-          # In manifest mode vcpkg reads vcpkg.json automatically.
-          # Do NOT pass individual package names - that is only valid in classic mode.
-          & "$env:VCPKG_ROOT\vcpkg.exe" install `
-            --triplet $triplet `
-            --x-manifest-root "${{ github.workspace }}" `
-            --clean-after-build
-
-      - name: Configure CMake (${{ matrix.arch }})
-        shell: pwsh
-        run: |
-          $triplet  = if ("${{ matrix.arch }}" -eq "x86") { "x86-windows" } else { "x64-windows" }
-          $platform = if ("${{ matrix.arch }}" -eq "x86") { "Win32" } else { "x64" }
-          $buildDir = "build-${{ matrix.arch }}"
-          cmake -B $buildDir `
-            -A $platform `
-            -DCMAKE_BUILD_TYPE=${{ matrix.config }} `
-            "-DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" `
-            "-DVCPKG_TARGET_TRIPLET=$triplet" `
-            "-DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/install-${{ matrix.arch }}"
-
-      - name: Build (${{ matrix.arch }})
-        shell: pwsh
-        run: |
-          cmake --build "build-${{ matrix.arch }}" `
-            --config ${{ matrix.config }} `
-            --parallel
-
-      - name: Install (${{ matrix.arch }})
-        shell: pwsh
-        run: |
-          cmake --install "build-${{ matrix.arch }}" --config ${{ matrix.config }}
-
-      - name: Package ZIP (${{ matrix.arch }})
-        shell: pwsh
-        run: |
-          $version = "${{ steps.ver.outputs.version }}"
-          $commit  = "${{ steps.ver.outputs.commit }}"
-          $arch    = "${{ matrix.arch }}"
-          $zipName = "${{ steps.ver.outputs.zip_name }}"
-          $stagDir = "${{ github.workspace }}\staging\$zipName"
-
-          New-Item -ItemType Directory -Force -Path $stagDir | Out-Null
-
-          # Copy DLL (prefer install tree, fall back to build tree)
-          $dllPath = Get-ChildItem "install-$arch\bin\XAudio2_9.dll" -ErrorAction SilentlyContinue
-          if (-not $dllPath) {
-            $dllPath = Get-ChildItem "build-$arch\${{ matrix.config }}\XAudio2_9.dll" -ErrorAction SilentlyContinue
-          }
-          if ($dllPath) { Copy-Item $dllPath.FullName $stagDir }
-
-          # Copy PDB if present
-          $pdbPath = Get-ChildItem "build-$arch\${{ matrix.config }}\*.pdb" -ErrorAction SilentlyContinue
-          if ($pdbPath) { Copy-Item $pdbPath.FullName $stagDir }
-
-          # Copy OpenAL Soft runtime DLL
-          $oalDll = Get-ChildItem "$env:VCPKG_ROOT\installed\$arch-windows\bin\OpenAL32.dll" -ErrorAction SilentlyContinue
-          if ($oalDll) { Copy-Item $oalDll.FullName $stagDir }
-
-          # Copy README / LICENSE
-          Copy-Item "README.md" $stagDir -ErrorAction SilentlyContinue
-          Copy-Item "LICENSE"   $stagDir -ErrorAction SilentlyContinue
-
-          # Write version manifest.
-          # PowerShell here-strings (@" "@) require the closing "@ at column 0,
-          # which conflicts with YAML block indentation - use Out-File instead.
-          $builtAt = (Get-Date -Format 'yyyy-MM-dd HH:mm:ss') + ' UTC'
-          "UEOAL $version ($arch)`nCommit : $commit`nBuilt  : $builtAt" |
-            Out-File -FilePath "$stagDir\VERSION.txt" -Encoding utf8
-
-          Compress-Archive -Path "$stagDir\*" `
-            -DestinationPath "${{ github.workspace }}\${zipName}.zip" `
-            -Force
-
-          Write-Host "ZIP created: ${zipName}.zip"
-
-      - name: Upload artifact (${{ matrix.arch }})
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ steps.ver.outputs.zip_name }}
-          path: ${{ github.workspace }}/${{ steps.ver.outputs.zip_name }}.zip
-          retention-days: 30
-
-  # Only runs when a version tag is pushed (e.g. v1.0.1)
-  release:
-    name: Create GitHub Release
-    runs-on: ubuntu-latest
-    needs: build
-
-    permissions:
-      contents: write
-
+          
     steps:
-      - name: Download all artifacts
+
+    - name: Clone repo and submodules
+      run: >
+        git
+        clone https://${{github.repository_owner}}:${{github.token}}@github.com/${{github.repository}}.git
+        "${{github.workspace}}"
+        --branch ${{env.Branch}}
+        --recurse-submodules
+
+    - name: Get current date, commit hash and count
+      run: |
+        echo "FirstCommitHash=$(git rev-list --max-parents=0 HEAD --first-parent)" >> $env:GITHUB_ENV
+        echo "CommitHash=$(git rev-parse HEAD)" >> $env:GITHUB_ENV
+        echo "CommitHashShort=$(git rev-parse --short=7 HEAD)" >> $env:GITHUB_ENV
+        echo "CommitCount=$(git rev-list --count HEAD)" >> $env:GITHUB_ENV
+        echo "CommitDate=$(git show -s --date=format:'%Y-%m-%d' --format=%cd)" >> $env:GITHUB_ENV
+
+    - name: Install vcpkg
+      uses: lukka/run-vcpkg@v11.5
+      with:
+        vcpkgGitCommitId: c2aeddd80357b17592e59ad965d2adf65a19b22f
+    - name: Install dependencies
+      run: |
+        vcpkg install
+
+    - name: Configure
+      run: >
+        cmake
+        -A "${{matrix.Settings.Platform}}"
+        -B "${{github.workspace}}/build"
+        -DCMAKE_BUILD_TYPE=${{matrix.Configuration}}
+        -DCMAKE_PREFIX_PATH=vcpkg\installed\${{matrix.Settings.Triplet}}
+
+    - name: Build
+      run: >
+        cmake
+        --build "${{github.workspace}}/build"
+        --config "${{matrix.Configuration}}"
+
+    - name: List files
+      run: ls -R
+
+#    - name: Deploy
+#      shell: cmd
+#      run: |
+#        windeployqt.exe "${{github.workspace}}/${{env.Artifacts}}/${{env.Executable}}"
+#        If exist "vcpkg\installed\${{matrix.Settings.Platform}}-windows\bin\*.dll"       (copy "vcpkg\installed\${{matrix.Settings.Platform}}-windows\bin\*.dll"       "${{env.Artifacts}}")
+#        If exist "vcpkg_installed\${{matrix.Settings.Platform}}-windows\bin\*.dll"       (copy "vcpkg_installed\${{matrix.Settings.Platform}}-windows\bin\*.dll"       "${{env.Artifacts}}")
+#        If exist "vcpkg\installed\${{matrix.Settings.Platform}}-windows\debug\bin\*.dll" (copy "vcpkg\installed\${{matrix.Settings.Platform}}-windows\debug\bin\*.dll" "${{env.Artifacts}}")
+#        If exist "vcpkg_installed\${{matrix.Settings.Platform}}-windows\debug\bin\*.dll" (copy "vcpkg_installed\${{matrix.Settings.Platform}}-windows\debug\bin\*.dll" "${{env.Artifacts}}")
+#        xcopy "assets\" "${{env.Artifacts}}\assets\" /s
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{env.Title}}-${{matrix.Settings.Name}}-${{matrix.Configuration}}
+        path: "${{github.workspace}}/${{env.Artifacts}}/"
+
+  Release:
+    name: Release
+    runs-on: windows-latest
+    needs: Build
+    steps:
+
+      - name: Clone repo and submodules
+        run: git clone https://${{github.repository_owner}}:${{github.token}}@github.com/${{github.repository}}.git "${{github.workspace}}" --branch ${{env.Branch}} --recurse-submodules
+
+      - name: Get current date, commit hash and count
+        run: |
+          echo "FirstCommitHash=$(git rev-list --max-parents=0 HEAD --first-parent)" >> $env:GITHUB_ENV
+          echo "CommitHash=$(git rev-parse HEAD)" >> $env:GITHUB_ENV
+          echo "CommitHashShort=$(git rev-parse --short=7 HEAD)" >> $env:GITHUB_ENV
+          echo "CommitCount=$(git rev-list --count HEAD)" >> $env:GITHUB_ENV
+          echo "CommitDate=$(git show -s --date=format:'%Y-%m-%d' --format=%cd)" >> $env:GITHUB_ENV
+
+#      - name: Download Artifacts - Win32
+#        uses: actions/download-artifact@v4
+#        with:
+#          name: ${{env.Title}}-Win32-Release
+#          path: Release/Win32/
+
+      - name: Download Artifacts - Win64
         uses: actions/download-artifact@v4
         with:
-          path: artifacts
+          name: ${{env.Title}}-Win64-Release
+          path: Release/Win64/
 
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          name: "UEOAL ${{ github.ref_name }}"
-          draft: false
-          prerelease: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-beta') }}
-          body: |
-            ## UEOAL ${{ github.ref_name }}
-
-            OpenAL Soft-based 3D audio spatializer / XAudio2 proxy for Unreal Engine 4/5 games.
-
-            ### Installation
-            1. Download the ZIP matching your game's architecture (most UE games are **x64**).
-            2. Extract `XAudio2_9.dll` (and `OpenAL32.dll`) into the game root directory
-               (same folder as the game `.exe`).
-            3. Launch the game - HRTF binaural audio is now active.
-
-            ### Logging
-            Set the environment variable `UEOAL_LOG_PATH` to enable verbose logging:
-            ```
-            set UEOAL_LOG_PATH=C:\ueoal.log
-            ```
-
-            ### Notes
-            - Requires OpenAL Soft with HRTF support (bundled `OpenAL32.dll`).
-            - Tested on UE 4.27 and UE 5.x.
-          files: artifacts/**/*.zip
+      - name: Deploy
+        run: |
+          cp "README.md" "Release/ReadMe.txt"
+          cp "LICENSE" "Release/License.txt"
+  
+      - name: Compress artifacts
+        if: github.event_name == 'push'
+        run: |
+          7z a "Release/${{env.Title}}.zip" "${{github.workspace}}/Release/*" -mx=9
+          cp "Release/${{env.Title}}.zip" "Release/${{env.Title}}_r${{env.CommitCount}}@${{env.CommitHashShort}}.zip"
+  
+      - name: Purge tag - latest-${{env.Branch}}
+        if: github.event_name == 'push'
+        run: |
+          gh release delete latest-${{env.Branch}} --repo ${{github.repository}} --cleanup-tag --yes || true
+  
+      - name: Release - archive-${{env.Branch}}
+        if: github.event_name == 'push'
+        run: |
+          gh release create archive-${{env.Branch}} --repo ${{github.repository}} --target ${{env.FirstCommitHash}} --latest=false --prerelease --title "${{env.Title}} ${{env.Branch}} build archive" --notes "Latest build: https://github.com/${{github.repository}}/releases/latest-${{env.Branch}}
+          Build logs: https://github.com/${{github.repository}}/actions" || true
+          gh release edit archive-${{env.Branch}} --repo ${{github.repository}} --target ${{env.FirstCommitHash}} --latest=false --prerelease --title "${{env.Title}} ${{env.Branch}} build archive" --notes "Latest build: https://github.com/${{github.repository}}/releases/latest-${{env.Branch}}
+          Build logs: https://github.com/${{github.repository}}/actions" || true
+          gh release upload archive-${{env.Branch}} --repo ${{github.repository}} --clobber "Release/${{env.Title}}_r${{env.CommitCount}}@${{env.CommitHashShort}}.zip"
+  
+      - name: Release - latest-${{env.Branch}}
+        if: github.event_name == 'push'
+        run: |
+          gh release create latest-${{env.Branch}} --repo ${{github.repository}} --target ${{env.CommitHash}} --generate-notes --latest=true --title "${{env.Title}} r${{env.CommitCount}}@${{env.CommitHashShort}}" --notes "Build archive: https://github.com/${{github.repository}}/releases/tag/archive-${{env.Branch}}
+          Build log: https://github.com/${{github.repository}}/actions/runs/${{github.run_id}}"
+          gh release upload latest-${{env.Branch}} --repo ${{github.repository}} --clobber "Release/${{env.Title}}.zip"
