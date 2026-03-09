@@ -59,16 +59,18 @@ jobs:
       with:
         vcpkgGitCommitId: c2aeddd80357b17592e59ad965d2adf65a19b22f
     - name: Install dependencies
-      run: |
+      run: >
         vcpkg install
+        --triplet ${{matrix.Settings.Triplet}}
 
     - name: Configure
       run: >
         cmake
         -A "${{matrix.Settings.Platform}}"
         -B "${{github.workspace}}/build"
-        -DCMAKE_BUILD_TYPE=${{matrix.Configuration}}
+        -DVCPKG_TARGET_TRIPLET=${{matrix.Settings.Triplet}}
         -DCMAKE_PREFIX_PATH=vcpkg\installed\${{matrix.Settings.Triplet}}
+        -DCMAKE_BUILD_TYPE=${{matrix.Configuration}}
 
     - name: Build
       run: >
