@@ -63,6 +63,9 @@ jobs:
         vcpkg install
         --triplet ${{matrix.Settings.Triplet}}
 
+    - name: List files
+      run: ls -R
+
     - name: Configure
       run: >
         cmake
