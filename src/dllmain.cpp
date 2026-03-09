@@ -8,7 +8,6 @@
 //   UEOAL_LOG_PATH=C:\path\to\ueoal.log
 // to enable verbose logging.
 
-#define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <xaudio2.h>
 
@@ -89,7 +88,6 @@ BOOL APIENTRY DllMain(HMODULE /*hModule*/, DWORD reason, LPVOID /*reserved*/) {
 //  XAudio2_9.dll will transparently pick up our proxy.
 // ─────────────────────────────────────────────────────────────────────────────
 
-extern "C" __declspec(dllexport)
 HRESULT WINAPI XAudio2Create(IXAudio2**           ppXAudio2,
                               UINT32               Flags,
                               XAUDIO2_PROCESSOR    XAudio2Processor)
@@ -119,7 +117,6 @@ HRESULT WINAPI XAudio2Create(IXAudio2**           ppXAudio2,
 }
 
 // ── XAudio2CreateWithVersionInfo (UE 4.27+ / Win 10 SDK) ────────────────────
-extern "C" __declspec(dllexport)
 HRESULT WINAPI XAudio2CreateWithVersionInfo(IXAudio2**        ppXAudio2,
                                              UINT32            Flags,
                                              XAUDIO2_PROCESSOR XAudio2Processor,
@@ -130,7 +127,6 @@ HRESULT WINAPI XAudio2CreateWithVersionInfo(IXAudio2**        ppXAudio2,
 }
 
 // ── CreateAudioVolumeMeter / CreateAudioReverb – forward to real DLL ─────────
-extern "C" __declspec(dllexport)
 HRESULT WINAPI CreateAudioVolumeMeter(IUnknown** ppApo) {
     HMODULE real = GetRealXAudio2();
     if (!real) return HRESULT_FROM_WIN32(ERROR_MOD_NOT_FOUND);
@@ -139,7 +135,6 @@ HRESULT WINAPI CreateAudioVolumeMeter(IUnknown** ppApo) {
     return fn ? fn(ppApo) : HRESULT_FROM_WIN32(ERROR_PROC_NOT_FOUND);
 }
 
-extern "C" __declspec(dllexport)
 HRESULT WINAPI CreateAudioReverb(IUnknown** ppApo) {
     HMODULE real = GetRealXAudio2();
     if (!real) return HRESULT_FROM_WIN32(ERROR_MOD_NOT_FOUND);

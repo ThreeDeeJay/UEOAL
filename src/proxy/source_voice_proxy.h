@@ -2,7 +2,9 @@
 // UEOAL – IXAudio2SourceVoice proxy: intercepts audio submission + 3D positioning
 #pragma once
 
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
 #include <xaudio2.h>
 

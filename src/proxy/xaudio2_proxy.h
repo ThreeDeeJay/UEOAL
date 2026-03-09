@@ -2,7 +2,9 @@
 // UEOAL – IXAudio2 proxy: wraps the real XAudio2_9.dll instance
 #pragma once
 
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
 #include <xaudio2.h>
 #include <atomic>

@@ -6,7 +6,7 @@ cmake_minimum_required(VERSION 3.20)
 # ============================================================
 
 project(UEOAL
-    VERSION 1.0.2
+    VERSION 1.0.3
     DESCRIPTION "OpenAL Soft-based 3D audio spatializer / XAudio2 proxy for UE4/5 games"
     LANGUAGES CXX
 )

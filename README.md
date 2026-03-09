@@ -1,6 +1,6 @@
 # UEOAL — Unreal Engine OpenAL Soft 3D Audio Spatializer
 
-[![Build UEOAL](https://github.com/ThreeDeeJay/UEOAL/actions/workflows/build.yml/badge.svg)](https://github.com/ThreeDeeJay/UEOAL/actions/workflows/build.yml)
+[![Build UEOAL](https://github.com/yourusername/UEOAL/actions/workflows/build.yml/badge.svg)](https://github.com/yourusername/UEOAL/actions/workflows/build.yml)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
 **UEOAL** is a drop-in `XAudio2_9.dll` proxy that intercepts Unreal Engine 4/5

@@ -2,7 +2,9 @@
 // UEOAL – X3DAudio hook: captures 3D emitter/listener data before XAudio2 sees it
 #pragma once
 
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
 #include <x3daudio.h>
 #include <mutex>
