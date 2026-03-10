@@ -117,12 +117,6 @@ jobs:
           echo "CommitCount=$(git rev-list --count HEAD)" >> $env:GITHUB_ENV
           echo "CommitDate=$(git show -s --date=format:'%Y-%m-%d' --format=%cd)" >> $env:GITHUB_ENV
 
-#      - name: Download Artifacts - Win32
-#        uses: actions/download-artifact@v4
-#        with:
-#          name: ${{env.Title}}-Win32-Release
-#          path: Release/Win32/
-
       - name: Download Artifacts - Win64
         uses: actions/download-artifact@v4
         with:
