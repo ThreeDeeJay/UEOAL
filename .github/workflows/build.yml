@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # UEOAL - GitHub Actions CI/CD
-# Builds XAudio2_9.dll for Win32 and x64, packages each into a versioned ZIP.
+# Builds XAudio2_9.dll + xaudio2_9redist.dll for Win32 and x64,
+# packages each architecture into a versioned ZIP.
 
 name: Build UEOAL
 
@@ -13,7 +14,6 @@ on:
   workflow_dispatch:
 
 env:
-  GH_TOKEN: ${{github.token}}
   VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
 
 jobs:
@@ -38,9 +38,8 @@ jobs:
         id: ver
         shell: bash
         run: |
-          # Try tag first, fall back to parsing CMakeLists.txt.
-          # grep -P is avoided: it fails on Windows runners with
-          # "supports only unibyte and UTF-8 locales". Use sed with BRE instead.
+          # grep -P fails on Windows runners (unibyte/UTF-8 locale error).
+          # Use sed with BRE instead.
           TAG=$(git describe --tags --match "v*" --abbrev=0 2>/dev/null || echo "")
           if [[ "$TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+) ]]; then
             VERSION="${BASH_REMATCH[1]}"
@@ -53,8 +52,8 @@ jobs:
           echo "zip_name=UEOAL-${VERSION}-${{ matrix.arch }}" >> "$GITHUB_OUTPUT"
           echo "Resolved version: $VERSION  commit: $COMMIT_SHORT"
 
-      # Split into two steps: GitHub Actions expression syntax does not support
-      # ternary operators inside action input values.
+      # Split into two steps: GitHub Actions does not support ternary
+      # operators inside action input values.
       - name: Set up MSVC (x64)
         if: matrix.arch == 'x64'
         uses: ilammy/msvc-dev-cmd@v1
@@ -131,31 +130,47 @@ jobs:
 
           New-Item -ItemType Directory -Force -Path $stagDir | Out-Null
 
-          # Copy DLL (prefer install tree, fall back to build tree)
-          $dllPath = Get-ChildItem "install-$arch\bin\XAudio2_9.dll" -ErrorAction SilentlyContinue
-          if (-not $dllPath) {
-            $dllPath = Get-ChildItem "build-$arch\${{ matrix.config }}\XAudio2_9.dll" -ErrorAction SilentlyContinue
+          # Copy both DLL variants. CMake produces two targets:
+          #   XAudio2_9.dll       - Mode A (system XAudio2 / UE5 / newer UE4)
+          #   xaudio2_9redist.dll - Mode B (UE4 games shipping the XAudio2 redist)
+          foreach ($dll in @("XAudio2_9.dll", "xaudio2_9redist.dll")) {
+            $dllPath = Get-ChildItem "install-$arch\bin\$dll" -ErrorAction SilentlyContinue
+            if (-not $dllPath) {
+              $dllPath = Get-ChildItem "build-$arch\${{ matrix.config }}\$dll" -ErrorAction SilentlyContinue
+            }
+            if ($dllPath) {
+              Copy-Item $dllPath.FullName $stagDir
+              Write-Host "Copied: $dll"
+            } else {
+              Write-Warning "Not found: $dll"
+            }
           }
-          if ($dllPath) { Copy-Item $dllPath.FullName $stagDir }
 
-          # Copy PDB if present
-          $pdbPath = Get-ChildItem "build-$arch\${{ matrix.config }}\*.pdb" -ErrorAction SilentlyContinue
-          if ($pdbPath) { Copy-Item $pdbPath.FullName $stagDir }
+          # PDBs (optional, aids crash reporting)
+          Get-ChildItem "build-$arch\${{ matrix.config }}\*.pdb" -ErrorAction SilentlyContinue |
+            ForEach-Object { Copy-Item $_.FullName $stagDir; Write-Host "Copied PDB: $($_.Name)" }
 
-          # Copy OpenAL Soft runtime DLL
+          # OpenAL Soft runtime DLL
           $oalDll = Get-ChildItem "$env:VCPKG_ROOT\installed\$arch-windows\bin\OpenAL32.dll" -ErrorAction SilentlyContinue
-          if ($oalDll) { Copy-Item $oalDll.FullName $stagDir }
+          if ($oalDll) {
+            Copy-Item $oalDll.FullName $stagDir
+            Write-Host "Copied: OpenAL32.dll"
+          } else {
+            Write-Warning "OpenAL32.dll not found in vcpkg tree"
+          }
 
-          # Copy README / LICENSE
           Copy-Item "README.md" $stagDir -ErrorAction SilentlyContinue
           Copy-Item "LICENSE"   $stagDir -ErrorAction SilentlyContinue
 
-          # Write version manifest.
-          # PowerShell here-strings (@" "@) require the closing "@ at column 0,
-          # which conflicts with YAML block indentation - use Out-File instead.
+          # Version manifest.
+          # Avoid PowerShell here-strings: their closing "@ must be at column 0
+          # which conflicts with YAML block scalar indentation.
           $builtAt = (Get-Date -Format 'yyyy-MM-dd HH:mm:ss') + ' UTC'
           "UEOAL $version ($arch)`nCommit : $commit`nBuilt  : $builtAt" |
             Out-File -FilePath "$stagDir\VERSION.txt" -Encoding utf8
+
+          Write-Host "Staging contents:"
+          Get-ChildItem $stagDir | Format-Table Name, Length -AutoSize
 
           Compress-Archive -Path "$stagDir\*" `
             -DestinationPath "${{ github.workspace }}\${zipName}.zip" `
@@ -170,19 +185,19 @@ jobs:
           path: ${{ github.workspace }}/${{ steps.ver.outputs.zip_name }}.zip
           retention-days: 30
 
-  # Only runs when a version tag is pushed (e.g. v1.0.1)
-  # Runs only when a version tag is pushed (e.g. git tag v1.0.6 && git push --tags)
+  # Runs only when a version tag is pushed (e.g. git tag v1.0.7 && git push --tags)
   release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
     needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
 
     permissions:
       contents: write
 
     steps:
-      # download-artifact@v4 places each artifact in its own subdirectory named
-      # after the artifact. merge-multiple: true flattens them all into one folder.
+      # download-artifact@v4 places each artifact in its own subdirectory.
+      # merge-multiple: true flattens them all into one folder.
       - name: Download all build artifacts
         uses: actions/download-artifact@v4
         with:
@@ -195,9 +210,9 @@ jobs:
       - name: Create GitHub Release and upload assets
         uses: softprops/action-gh-release@v2
         with:
-          token: ${{ github.token }}
+          token: ${{ secrets.GITHUB_TOKEN }}
           name: "UEOAL ${{ github.ref_name }}"
-          tag_name: ${{github.ref_name}}
+          tag_name: latest-${{ github.ref_name }}
           draft: false
           prerelease: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-beta') }}
           fail_on_unmatched_files: true
@@ -206,20 +221,26 @@ jobs:
 
             OpenAL Soft-based 3D audio spatializer / XAudio2 proxy for Unreal Engine 4/5 games.
 
-            ### Installation
-            1. Download the ZIP matching your game's architecture (most UE games are **x64**).
-            2. Extract `XAudio2_9.dll` and `OpenAL32.dll` into the game root directory
-               (same folder as the game `.exe`).
-            3. Launch the game - HRTF binaural audio is now active.
+            ### Mode A: System XAudio2 (UE5 / most modern UE4)
+            1. Download the ZIP for your architecture (most games are **x64**).
+            2. Copy `XAudio2_9.dll` and `OpenAL32.dll` next to the game `.exe`.
+            3. Launch the game.
 
-            ### Enabling verbose logging
-            Set the environment variable `UEOAL_LOG_PATH` before launching the game:
+            ### Mode B: XAudio2 Redistributable (older UE4 games)
+            Some UE4 games load XAudio2 from a bundled redist DLL such as:
+            `Engine\Binaries\ThirdParty\Windows\XAudio2_9\x64\xaudio2_9redist.dll`
+            1. Go to that folder.
+            2. Rename `xaudio2_9redist.dll` to `xaudio2_9redist_real.dll`.
+            3. Copy UEOAL's `xaudio2_9redist.dll` and `OpenAL32.dll` into that same folder.
+            4. Launch the game.
+
+            ### Verbose logging
             ```bat
             set UEOAL_LOG_PATH=C:\ueoal.log
             ```
 
             ### Notes
-            - `OpenAL32.dll` (bundled) must sit alongside `XAudio2_9.dll`.
+            - `OpenAL32.dll` must sit alongside the UEOAL DLL.
             - Tested on UE 4.27 and UE 5.x.
             - Source available under GPLv3.
           files: release-assets/*.zip
