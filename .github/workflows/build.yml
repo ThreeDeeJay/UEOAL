@@ -203,29 +203,6 @@ jobs:
           Get-ChildItem -Recurse "build-$arch\$config" -Filter "*.pdb" -ErrorAction SilentlyContinue |
             ForEach-Object { Copy-Item $_.FullName $stagDir; Write-Host "PDB $($_.Name)" }
 
-          # OpenAL Soft runtime DLL.
-          # vcpkg may use different triplet suffixes (x64-windows, x64-windows-static, etc.)
-          # and the DLL may be named OpenAL.dll or OpenAL32.dll depending on version.
-          # Search the entire installed tree recursively, skip debug builds.
-          Write-Host "Searching vcpkg installed tree for OpenAL DLL..."
-          $allOal = Get-ChildItem -Recurse "$env:VCPKG_ROOT\installed" `
-                      -ErrorAction SilentlyContinue |
-                    Where-Object { $_.Name -match '^[Oo]pen[Aa][Ll].*\.dll$' }
-          $allOal | Select-Object FullName | Format-Table -AutoSize
-
-          $oalDll = $allOal |
-                    Where-Object {
-                      $_.FullName -notmatch '\\debug\\' -and
-                      $_.FullName -match [regex]::Escape($arch)
-                    } |
-                    Select-Object -First 1
-          if ($oalDll) {
-            Copy-Item $oalDll.FullName $stagDir
-            Write-Host "OK  $($oalDll.Name)  <-  $($oalDll.FullName)"
-          } else {
-            Write-Error "MISSING: No OpenAL*.dll found in vcpkg installed tree for arch=$arch"
-          }
-
           Copy-Item "README.md" $stagDir -ErrorAction SilentlyContinue
           Copy-Item "LICENSE"   $stagDir -ErrorAction SilentlyContinue
 
