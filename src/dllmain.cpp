@@ -247,16 +247,34 @@ HRESULT WINAPI UEOAL_XAudio2Create(IXAudio2**        ppXAudio2,
         return HRESULT_FROM_WIN32(ERROR_MOD_NOT_FOUND);
     }
 
-    using Fn = HRESULT(WINAPI*)(IXAudio2**, UINT32, XAUDIO2_PROCESSOR);
-    auto fn = reinterpret_cast<Fn>(GetProcAddress(real, "XAudio2Create"));
-    if (!fn) {
-        LOG_ERROR("XAudio2Create not found in real DLL");
-        DbgLog(L"XAudio2Create: GetProcAddress failed");
+    // xaudio2_9redist.dll does NOT export XAudio2Create - it only exports
+    // XAudio2CreateWithVersionInfo.  Try the plain name first (system DLL),
+    // then fall back to the versioned name (redist DLL).
+    using Fn     = HRESULT(WINAPI*)(IXAudio2**, UINT32, XAUDIO2_PROCESSOR);
+    using FnVer  = HRESULT(WINAPI*)(IXAudio2**, UINT32, XAUDIO2_PROCESSOR, DWORD);
+
+    auto fn    = reinterpret_cast<Fn>   (GetProcAddress(real, "XAudio2Create"));
+    auto fnVer = reinterpret_cast<FnVer>(GetProcAddress(real, "XAudio2CreateWithVersionInfo"));
+
+    if (!fn && !fnVer) {
+        DbgLog(L"XAudio2Create: neither XAudio2Create nor XAudio2CreateWithVersionInfo"
+               L" found in real DLL");
+        LOG_ERROR("XAudio2Create: no usable entry point in real DLL");
         return HRESULT_FROM_WIN32(ERROR_PROC_NOT_FOUND);
     }
 
+    if (fn) {
+        DbgLog(L"XAudio2Create: calling XAudio2Create in real DLL");
+    } else {
+        DbgLog(L"XAudio2Create: XAudio2Create not found, falling back to"
+               L" XAudio2CreateWithVersionInfo (redist DLL)");
+    }
+
     IXAudio2* realObj = nullptr;
-    HRESULT hr = fn(&realObj, Flags, XAudio2Processor);
+    // NTDDI_WIN10 (0x0A000000) is the version the redist DLL expects;
+    // the system DLL ignores this parameter entirely.
+    HRESULT hr = fn ? fn(&realObj, Flags, XAudio2Processor)
+                    : fnVer(&realObj, Flags, XAudio2Processor, 0x0A000000);
     if (FAILED(hr) || !realObj) {
         wchar_t msg[64];
         StringCchPrintfW(msg, 64, L"XAudio2Create: real DLL returned 0x%08X", hr);
