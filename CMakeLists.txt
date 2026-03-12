@@ -6,7 +6,7 @@ cmake_minimum_required(VERSION 3.20)
 # ============================================================
 
 project(UEOAL
-    VERSION 1.0.11
+    VERSION 1.0.12
     DESCRIPTION "OpenAL Soft-based 3D audio spatializer / XAudio2 proxy for UE4/5 games"
     LANGUAGES CXX
 )
@@ -104,6 +104,39 @@ install(FILES
     DESTINATION .
 )
 
+
+# ---------------------------------------------------------------------------
+#  Target 3: xaudio2_9redist.dll DIAGNOSTIC build
+#  Pure passthrough with exhaustive logging. No OpenAL, no proxy objects.
+#  Use this to verify the real DLL loads and to see exactly what the game
+#  calls before enabling interception.
+#  Output: xaudio2_9redist_diag.dll  (rename to xaudio2_9redist.dll to use)
+# ---------------------------------------------------------------------------
+add_library(UEOAL_Diag SHARED
+    src/diagnostic/diag_main.cpp
+    src/diagnostic/diag_exports.def
+)
+
+target_include_directories(UEOAL_Diag PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/src"
+    "${CMAKE_CURRENT_BINARY_DIR}/include"
+)
+
+target_link_libraries(UEOAL_Diag PRIVATE xaudio2)
+
+target_compile_definitions(UEOAL_Diag PRIVATE
+    WIN32_LEAN_AND_MEAN
+    NOMINMAX
+    _CRT_SECURE_NO_WARNINGS
+)
+
+set_target_properties(UEOAL_Diag PROPERTIES
+    OUTPUT_NAME "xaudio2_9redist_diag"
+    PREFIX      ""
+    SUFFIX      ".dll"
+)
+
+install(TARGETS UEOAL_Diag RUNTIME DESTINATION bin)
 # ---------------------------------------------------------------------------
 #  Packaging (CPack)
 # ---------------------------------------------------------------------------

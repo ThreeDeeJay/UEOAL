@@ -187,6 +187,8 @@ jobs:
           #   XAudio2_9.dll       - Mode A (system XAudio2 / UE5 / newer UE4)
           #   xaudio2_9redist.dll - Mode B (UE4 games shipping the XAudio2 redist)
           $requiredDlls = @("XAudio2_9.dll", "xaudio2_9redist.dll")
+          # Diagnostic passthrough - optional, copy if present
+          $optionalDlls = @("xaudio2_9redist_diag.dll")
           foreach ($dll in $requiredDlls) {
             $found = Find-Dll $dll
             if ($found) {
@@ -198,10 +200,42 @@ jobs:
               Write-Error "MISSING: $dll not found anywhere under build-$arch or install-$arch"
             }
           }
+          foreach ($dll in $optionalDlls) {
+            $found = Find-Dll $dll
+            if ($found) {
+              Copy-Item $found.FullName $stagDir
+              Write-Host "OK  $dll  <-  $($found.FullName)"
+            } else {
+              Write-Host "OPTIONAL not found (skipping): $dll"
+            }
+          }
 
           # PDBs (optional, aids crash reporting)
           Get-ChildItem -Recurse "build-$arch\$config" -Filter "*.pdb" -ErrorAction SilentlyContinue |
             ForEach-Object { Copy-Item $_.FullName $stagDir; Write-Host "PDB $($_.Name)" }
+
+          # OpenAL Soft runtime DLL.
+          # vcpkg may use different triplet suffixes (x64-windows, x64-windows-static, etc.)
+          # and the DLL may be named OpenAL.dll or OpenAL32.dll depending on version.
+          # Search the entire installed tree recursively, skip debug builds.
+          Write-Host "Searching vcpkg installed tree for OpenAL DLL..."
+          $allOal = Get-ChildItem -Recurse "$env:VCPKG_ROOT\installed" `
+                      -ErrorAction SilentlyContinue |
+                    Where-Object { $_.Name -match '^[Oo]pen[Aa][Ll].*\.dll$' }
+          $allOal | Select-Object FullName | Format-Table -AutoSize
+
+          $oalDll = $allOal |
+                    Where-Object {
+                      $_.FullName -notmatch '\\debug\\' -and
+                      $_.FullName -match [regex]::Escape($arch)
+                    } |
+                    Select-Object -First 1
+          if ($oalDll) {
+            Copy-Item $oalDll.FullName $stagDir
+            Write-Host "OK  $($oalDll.Name)  <-  $($oalDll.FullName)"
+          } else {
+            Write-Error "MISSING: No OpenAL*.dll found in vcpkg installed tree for arch=$arch"
+          }
 
           Copy-Item "README.md" $stagDir -ErrorAction SilentlyContinue
           Copy-Item "LICENSE"   $stagDir -ErrorAction SilentlyContinue
