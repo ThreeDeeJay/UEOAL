@@ -204,7 +204,7 @@ static HMODULE GetRealXAudio2Module() { return GetRealXAudio2(); }
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID /*reserved*/)
 {
     switch (reason) {
-    case DLL_PROCESS_ATTACH:
+    case DLL_PROCESS_ATTACH: {
         DisableThreadLibraryCalls(hModule);
         Logger::Get().Initialize();
         LOG_INFO("UEOAL " UEOAL_VERSION_STRING
@@ -223,6 +223,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID /*reserved*/)
         if (!X3DAudioHook::Install(hReal))
             LOG_WARN("X3DAudio hook unavailable - listener/emitter tracking degraded");
         break;
+    }
 
     case DLL_PROCESS_DETACH:
         LOG_INFO("UEOAL detaching...");
