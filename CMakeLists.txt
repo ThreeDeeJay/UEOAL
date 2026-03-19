@@ -6,7 +6,7 @@ cmake_minimum_required(VERSION 3.20)
 # ============================================================
 
 project(UEOAL
-    VERSION 1.0.12
+    VERSION 1.0.13
     DESCRIPTION "OpenAL Soft-based 3D audio spatializer / XAudio2 proxy for UE4/5 games"
     LANGUAGES CXX
 )
@@ -42,8 +42,8 @@ set(UEOAL_SOURCES
 # ---------------------------------------------------------------------------
 #  Helper macro to stamp shared properties on both DLL targets
 # ---------------------------------------------------------------------------
-macro(ueoal_configure_target TGT OUTPUT_DLL_NAME)
-    target_sources(${TGT} PRIVATE ${UEOAL_SOURCES} src/exports.def)
+macro(ueoal_configure_target TGT OUTPUT_DLL_NAME DEF_FILE)
+    target_sources(${TGT} PRIVATE ${UEOAL_SOURCES} ${DEF_FILE})
 
     target_include_directories(${TGT}
         PRIVATE
@@ -83,7 +83,7 @@ endmacro()
 #  Place next to the game .exe; Windows DLL search finds it before System32.
 # ---------------------------------------------------------------------------
 add_library(UEOAL_XAudio2_9 SHARED)
-ueoal_configure_target(UEOAL_XAudio2_9 "XAudio2_9")
+ueoal_configure_target(UEOAL_XAudio2_9 "XAudio2_9" src/exports.def)
 
 # ---------------------------------------------------------------------------
 #  Target 2: xaudio2_9redist.dll  (Mode B - XAudio2 redistributable)
@@ -92,7 +92,7 @@ ueoal_configure_target(UEOAL_XAudio2_9 "XAudio2_9")
 #  and OpenAL32.dll in the same folder.
 # ---------------------------------------------------------------------------
 add_library(UEOAL_Redist SHARED)
-ueoal_configure_target(UEOAL_Redist "xaudio2_9redist")
+ueoal_configure_target(UEOAL_Redist "xaudio2_9redist" src/exports_redist.def)
 
 # ---------------------------------------------------------------------------
 #  Install

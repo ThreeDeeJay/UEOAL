@@ -1,0 +1,8 @@
+; UEOAL - module definition file for xaudio2_9redist.dll target
+; Must match the output DLL name exactly or LNK4070 fires.
+LIBRARY "xaudio2_9redist"
+EXPORTS
+    XAudio2Create               = UEOAL_XAudio2Create               @1
+    XAudio2CreateWithVersionInfo = UEOAL_XAudio2CreateWithVersionInfo @2
+    CreateAudioVolumeMeter       = UEOAL_CreateAudioVolumeMeter      @3
+    CreateAudioReverb            = UEOAL_CreateAudioReverb           @4

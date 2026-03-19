@@ -1,8 +1,9 @@
 ; UEOAL Diagnostic Passthrough - export definition
-; Plain names, no aliasing needed (we define them directly, no xaudio2.h conflict)
-LIBRARY "xaudio2_9redist"
+; Use ExportedName = InternalName aliasing so we never define a symbol called
+; XAudio2Create (xaudio2.h already defines it inline -> C2084 if we do too).
+LIBRARY "xaudio2_9redist_diag"
 EXPORTS
-    XAudio2Create                @1
-    XAudio2CreateWithVersionInfo @2
-    CreateAudioVolumeMeter       @3
-    CreateAudioReverb            @4
+    XAudio2Create               = Diag_XAudio2Create               @1
+    XAudio2CreateWithVersionInfo = Diag_XAudio2CreateWithVersionInfo @2
+    CreateAudioVolumeMeter       = Diag_CreateAudioVolumeMeter      @3
+    CreateAudioReverb            = Diag_CreateAudioReverb           @4

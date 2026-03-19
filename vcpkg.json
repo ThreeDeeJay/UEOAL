@@ -1,6 +1,6 @@
 {
   "name": "ueoal",
-  "version": "1.0.12",
+  "version": "1.0.13",
   "description": "OpenAL Soft 3D audio spatializer proxy for UE4/5",
   "dependencies": [
     "openal-soft",
