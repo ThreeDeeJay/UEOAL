@@ -20,7 +20,7 @@ CapturedListener    X3DAudioHook::s_listener{};
 std::mutex          X3DAudioHook::s_listenerMutex{};
 
 // ─────────────────────────────────────────────────────────────────────────────
-bool X3DAudioHook::Install() {
+bool X3DAudioHook::Install(HMODULE hExtraModule) {
     if (s_installed) return true;
 
     MH_STATUS mhStatus = MH_Initialize();
@@ -29,13 +29,20 @@ bool X3DAudioHook::Install() {
         return false;
     }
 
-    // Locate X3DAudio1_7.dll (ships with DirectX / Windows)
-    // Modern Windows ships it merged into XAudio2_9.dll or as a separate DLL.
-    // We search common names in order.
+    // Locate the DLL that owns X3DAudioCalculate.
+    //
+    // Mode A (system XAudio2): X3DAudio lives in X3DAudio1_7.dll, X3DAudio1_8.dll,
+    //   or is re-exported from XAudio2_9.dll on modern Windows.
+    // Mode B (redist): X3DAudioCalculate is an export of xaudio2_9redist_real.dll
+    //   itself. hExtraModule is the already-loaded real redist handle.
+    //
+    // Search order: named system DLLs first, then hExtraModule, so Mode A always
+    // wins if both are present (system DLL is the authoritative implementation).
+
     const char* x3dLibNames[] = {
         "X3DAudio1_7.dll",
         "X3DAudio1_8.dll",
-        "XAudio2_9.dll",  // recent Windows – X3DAudioCalculate re-exported here
+        "XAudio2_9.dll",  // recent Windows - X3DAudioCalculate re-exported here
         nullptr
     };
 
@@ -43,14 +50,21 @@ bool X3DAudioHook::Install() {
     for (int i = 0; x3dLibNames[i]; ++i) {
         hX3D = GetModuleHandleA(x3dLibNames[i]);
         if (!hX3D) hX3D = LoadLibraryA(x3dLibNames[i]);
-        if (hX3D) {
+        if (hX3D && GetProcAddress(hX3D, "X3DAudioCalculate")) {
             LOG_INFO("X3DAudio found in %s", x3dLibNames[i]);
             break;
         }
+        hX3D = nullptr;
+    }
+
+    // Mode B fallback: use the extra module (real redist DLL) if provided
+    if (!hX3D && hExtraModule && GetProcAddress(hExtraModule, "X3DAudioCalculate")) {
+        hX3D = hExtraModule;
+        LOG_INFO("X3DAudio found in hExtraModule (redist passthrough mode)");
     }
 
     if (!hX3D) {
-        LOG_WARN("X3DAudio DLL not found – 3D position capture disabled");
+        LOG_WARN("X3DAudio DLL not found - 3D position capture disabled");
         return false;
     }
 

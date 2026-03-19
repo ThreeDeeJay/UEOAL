@@ -1,8 +1,19 @@
 ; UEOAL - module definition file for xaudio2_9redist.dll target
-; Must match the output DLL name exactly or LNK4070 fires.
+; Ordinals match the real xaudio2_9redist.dll export table (verified via diag log):
+;   @1 XAudio2Create
+;   @2 CreateAudioReverb
+;   @3 CreateAudioVolumeMeter
+;   @4 CreateFX
+;   @5 X3DAudioCalculate
+;   @6 X3DAudioInitialize
+; XAudio2CreateWithVersionInfo is not in the real DLL; we export it for any
+; caller that probes for it, but without a fixed ordinal.
 LIBRARY "xaudio2_9redist"
 EXPORTS
     XAudio2Create               = UEOAL_XAudio2Create               @1
-    XAudio2CreateWithVersionInfo = UEOAL_XAudio2CreateWithVersionInfo @2
+    CreateAudioReverb            = UEOAL_CreateAudioReverb           @2
     CreateAudioVolumeMeter       = UEOAL_CreateAudioVolumeMeter      @3
-    CreateAudioReverb            = UEOAL_CreateAudioReverb           @4
+    CreateFX                     = UEOAL_CreateFX                    @4
+    X3DAudioCalculate            = UEOAL_X3DAudioCalculate           @5
+    X3DAudioInitialize           = UEOAL_X3DAudioInitialize          @6
+    XAudio2CreateWithVersionInfo = UEOAL_XAudio2CreateWithVersionInfo

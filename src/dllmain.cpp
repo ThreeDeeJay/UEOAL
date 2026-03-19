@@ -195,6 +195,9 @@ HMODULE GetRealXAudio2()
 
 } // anonymous namespace
 
+// Public accessor so DllMain can pass the real module to X3DAudioHook.
+static HMODULE GetRealXAudio2Module() { return GetRealXAudio2(); }
+
 // ---------------------------------------------------------------------------
 //  DLL lifecycle
 // ---------------------------------------------------------------------------
@@ -211,7 +214,13 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID /*reserved*/)
         if (!OpenALBackend::Get().Initialize())
             LOG_ERROR("OpenAL backend init failed - spatial audio will be disabled");
 
-        if (!X3DAudioHook::Install())
+        // Load the real DLL eagerly so its handle is available for
+        // the X3DAudio hook search (needed in Mode B / redist).
+        HMODULE hReal = GetRealXAudio2Module();
+        if (!hReal)
+            LOG_WARN("Real XAudio2 DLL not loaded yet at attach - Mode B hook may be limited");
+
+        if (!X3DAudioHook::Install(hReal))
             LOG_WARN("X3DAudio hook unavailable - listener/emitter tracking degraded");
         break;
 
@@ -313,4 +322,57 @@ HRESULT WINAPI UEOAL_CreateAudioReverb(IUnknown** ppApo)
     using Fn = HRESULT(WINAPI*)(IUnknown**);
     auto fn = reinterpret_cast<Fn>(GetProcAddress(real, "CreateAudioReverb"));
     return fn ? fn(ppApo) : HRESULT_FROM_WIN32(ERROR_PROC_NOT_FOUND);
+}
+
+// ---------------------------------------------------------------------------
+//  Redist-mode additional exports
+//  The xaudio2_9redist.dll exports X3DAudioCalculate, X3DAudioInitialize,
+//  and CreateFX in addition to the XAudio2 API. Forward them to the real DLL.
+//  X3DAudioCalculate is also hooked by MinHook on the real DLL, so the hook
+//  fires when we call through - no duplicate capture logic needed here.
+// ---------------------------------------------------------------------------
+
+// X3DAUDIO_HANDLE is BYTE[20]; decays to pointer at call boundary. void* is
+// ABI-compatible for both input (const) and output usages.
+VOID WINAPI UEOAL_X3DAudioCalculate(
+    const void* pInstance,
+    const void* pListener,
+    const void* pEmitter,
+    UINT32      Flags,
+    void*       pDSPSettings)
+{
+    HMODULE real = GetRealXAudio2();
+    if (!real) return;
+    using Fn = VOID(WINAPI*)(const void*, const void*, const void*, UINT32, void*);
+    auto fn = reinterpret_cast<Fn>(GetProcAddress(real, "X3DAudioCalculate"));
+    if (fn) fn(pInstance, pListener, pEmitter, Flags, pDSPSettings);
+}
+
+// X3DAudioInitialize writes into the X3DAUDIO_HANDLE output buffer (20 bytes).
+HRESULT WINAPI UEOAL_X3DAudioInitialize(
+    UINT32 SpeakerChannelMask,
+    float  SpeedOfSound,
+    void*  pInstance)          // X3DAUDIO_HANDLE* - output
+{
+    HMODULE real = GetRealXAudio2();
+    if (!real) return HRESULT_FROM_WIN32(ERROR_MOD_NOT_FOUND);
+    using Fn = HRESULT(WINAPI*)(UINT32, float, void*);
+    auto fn = reinterpret_cast<Fn>(GetProcAddress(real, "X3DAudioInitialize"));
+    return fn ? fn(SpeakerChannelMask, SpeedOfSound, pInstance)
+              : HRESULT_FROM_WIN32(ERROR_PROC_NOT_FOUND);
+}
+
+// CreateFX(REFCLSID, IUnknown**, const void*, UINT32)
+HRESULT WINAPI UEOAL_CreateFX(
+    const void* clsid,
+    void**      ppEffect,
+    const void* pInitData,
+    UINT32      InitDataByteSize)
+{
+    HMODULE real = GetRealXAudio2();
+    if (!real) return HRESULT_FROM_WIN32(ERROR_MOD_NOT_FOUND);
+    using Fn = HRESULT(WINAPI*)(const void*, void**, const void*, UINT32);
+    auto fn = reinterpret_cast<Fn>(GetProcAddress(real, "CreateFX"));
+    return fn ? fn(clsid, ppEffect, pInitData, InitDataByteSize)
+              : HRESULT_FROM_WIN32(ERROR_PROC_NOT_FOUND);
 }

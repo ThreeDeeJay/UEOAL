@@ -32,7 +32,8 @@ struct CapturedListener {
 class X3DAudioHook {
 public:
     /// Install the detour on X3DAudioCalculate (idempotent).
-    static bool Install();
+    /// hExtraModule: additional module to search (e.g. the real redist DLL in Mode B).
+    static bool Install(HMODULE hExtraModule = nullptr);
 
     /// Remove the detour; safe to call even if Install() was never called.
     static void Uninstall();
