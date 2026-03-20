@@ -13,6 +13,7 @@
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
+#include <psapi.h>
 #include <strsafe.h>
 
 typedef UINT32 XA2Processor;
@@ -141,7 +142,7 @@ static void LogLoadedModules()
     DWORD needed = 0;
     if (!EnumProcessModules(GetCurrentProcess(), mods, sizeof(mods), &needed))
         return;
-    DWORD count = min(needed / (DWORD)sizeof(HMODULE), (DWORD)64);
+    DWORD count = (needed / (DWORD)sizeof(HMODULE) < 64) ? needed / (DWORD)sizeof(HMODULE) : 64;
     Log(L"Loaded modules (%lu shown, %lu total):", count, needed / (DWORD)sizeof(HMODULE));
     for (DWORD i = 0; i < count; ++i) {
         wchar_t name[MAX_PATH]{};
