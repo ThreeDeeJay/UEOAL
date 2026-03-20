@@ -1,9 +1,10 @@
 ; UEOAL Diagnostic Passthrough - export definition
-; Use ExportedName = InternalName aliasing so we never define a symbol called
-; XAudio2Create (xaudio2.h already defines it inline -> C2084 if we do too).
 LIBRARY "xaudio2_9redist_diag"
 EXPORTS
     XAudio2Create               = Diag_XAudio2Create               @1
-    XAudio2CreateWithVersionInfo = Diag_XAudio2CreateWithVersionInfo @2
+    CreateAudioReverb            = Diag_CreateAudioReverb           @2
     CreateAudioVolumeMeter       = Diag_CreateAudioVolumeMeter      @3
-    CreateAudioReverb            = Diag_CreateAudioReverb           @4
+    CreateFX                     = Diag_CreateFX                    @4
+    X3DAudioCalculate            = Diag_X3DAudioCalculate           @5
+    X3DAudioInitialize           = Diag_X3DAudioInitialize          @6
+    XAudio2CreateWithVersionInfo = Diag_XAudio2CreateWithVersionInfo

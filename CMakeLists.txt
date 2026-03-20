@@ -6,7 +6,7 @@ cmake_minimum_required(VERSION 3.20)
 # ============================================================
 
 project(UEOAL
-    VERSION 1.0.16
+    VERSION 1.0.17
     DESCRIPTION "OpenAL Soft-based 3D audio spatializer / XAudio2 proxy for UE4/5 games"
     LANGUAGES CXX
 )
@@ -122,7 +122,7 @@ target_include_directories(UEOAL_Diag PRIVATE
     "${CMAKE_CURRENT_BINARY_DIR}/include"
 )
 
-target_link_libraries(UEOAL_Diag PRIVATE xaudio2)
+target_link_libraries(UEOAL_Diag PRIVATE xaudio2 psapi)
 
 target_compile_definitions(UEOAL_Diag PRIVATE
     WIN32_LEAN_AND_MEAN
